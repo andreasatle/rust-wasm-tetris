@@ -15,17 +15,17 @@ pub fn greet() -> String {
     "Hello, from Rust!".to_string()
 }
 
-type TetrisCell = usize;
+type TetrisCell = u32;
 type TetrisCells = [TetrisCell; 4];
 
 #[wasm_bindgen]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Shape {
     I, O, J, L, S, Z, T,
 }
 
 #[wasm_bindgen]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Orientation {
     Up,
     Right,
@@ -38,16 +38,16 @@ pub enum Orientation {
 pub struct Tetromino {
     shape: Shape,
     orientation: Orientation,
-    position: usize,
+    cells: u32,
 }
 
 #[wasm_bindgen]
 impl Tetromino {
-    pub fn new(shape: Shape, orientation: Orientation, position: TetrisCell) -> Tetromino {
+    pub fn new(shape: Shape, orientation: Orientation) -> Tetromino {
         Tetromino{
             shape,
             orientation,
-            position,
+            cells: 0,
         }
     }
 
@@ -68,53 +68,87 @@ impl Tetromino {
             Orientation::Left => Orientation::Down,
         }
     }
-
-
+    pub fn update(&mut self) {
+        match (self.shape, self.orientation) {
+            (Shape::I, Orientation::Up) => self.cells = (1<<4) + (1<<5) + (1<<6) + (1<<7),
+            (Shape::I, Orientation::Right) => self.cells = (1<<2) + (1<<6) + (1<<10) + (1<<14),
+            (Shape::I, Orientation::Down) => self.cells = (1<<8) + (1<<9) + (1<<10) + (1<<11),
+            (Shape::I, Orientation::Left) => self.cells = (1<<1) + (1<<5) + (1<<9) + (1<<13),
+            (Shape::J, Orientation::Up) => self.cells = (1<<0) + (1<<4) + (1<<5) + (1<<6),
+            (Shape::J, Orientation::Right) => self.cells = (1<<1) + (1<<2) + (1<<5) + (1<<9),
+            (Shape::J, Orientation::Down) => self.cells = (1<<4) + (1<<5) + (1<<6) + (1<<10),
+            (Shape::J, Orientation::Left) => self.cells = (1<<1) + (1<<5) + (1<<8) + (1<<9),
+            (Shape::L, Orientation::Up) => self.cells = (1<<2) + (1<<4) + (1<<5) + (1<<6),
+            (Shape::L, Orientation::Right) => self.cells = (1<<1) + (1<<5) + (1<<9) + (1<<10),
+            (Shape::L, Orientation::Down) => self.cells = (1<<4) + (1<<5) + (1<<6) + (1<<8),
+            (Shape::L, Orientation::Left) => self.cells = (1<<0) + (1<<1) + (1<<5) + (1<<9),
+            (Shape::O, _) => self.cells = (1<<1) + (1<<2) + (1<<5) + (1<<6),
+            (Shape::S, Orientation::Up) => self.cells = (1<<1) + (1<<2) + (1<<4) + (1<<5),
+            (Shape::S, Orientation::Right) => self.cells = (1<<1) + (1<<5) + (1<<6) + (1<<10),
+            (Shape::S, Orientation::Down) => self.cells = (1<<5) + (1<<6) + (1<<8) + (1<<9),
+            (Shape::S, Orientation::Left) => self.cells = (1<<0) + (1<<4) + (1<<5) + (1<<9),
+            (Shape::T, Orientation::Up) => self.cells = (1<<1) + (1<<4) + (1<<5) + (1<<6),
+            (Shape::T, Orientation::Right) => self.cells = (1<<1) + (1<<5) + (1<<6) + (1<<9),
+            (Shape::T, Orientation::Down) => self.cells = (1<<4) + (1<<5) + (1<<6) + (1<<9),
+            (Shape::T, Orientation::Left) => self.cells = (1<<1) + (1<<4) + (1<<5) + (1<<9),
+            (Shape::Z, Orientation::Up) => self.cells = (1<<0) + (1<<1) + (1<<5) + (1<<6),
+            (Shape::Z, Orientation::Right) => self.cells = (1<<2) + (1<<5) + (1<<6) + (1<<9),
+            (Shape::Z, Orientation::Down) => self.cells = (1<<4) + (1<<5) + (1<<9) + (1<<10),
+            (Shape::Z, Orientation::Left) => self.cells = (1<<1) + (1<<4) + (1<<5) + (1<<8),
+            _ => {},
+        };
+    }
+    /// Return the pointer to the tetromino.
+    pub fn cells(&self) -> u32 {
+        self.cells
+    }
 }
 
-/// ColumnMask is a bit-mask for the columns of a row.
-type ColumnMask = usize;
-
-/// ColorMask is a "3-bit mask" for 7 colors for the columns of the row.
-type ColorMask = usize;
+/// ColumnMask uses 3 bits per column of each row.
+/// There are 8 different states for each cell on the play board, represented by the 3 bits.
+/// The states are the seven different types of tetrominos, or no tetromino.
+type ColumnMask = u64;
 
 #[wasm_bindgen]
 pub struct World {
     /// Width of the tetris-game.
-    width : usize,
+    width : u32,
     /// Height of the tetris-game.
-    height: usize,
+    height: u32,
     /// The current tetromino in the game.
     tetromino: Tetromino,
-    /// The coordinates of the current tetromino in the game.
-    tetromino_cells: TetrisCells,
+    /// The horizontal shift of current tetromino.
+    shift: i32,
+    /// The vertical drop of the current tetromino.
+    drop: i32,
     /// The uncleared old tetrominos in the game.
     old_cells: Vec<ColumnMask>,
 }
 
+
 #[wasm_bindgen]
 impl World {
 
-    pub fn new(width: usize, height: usize, shape: Shape, orientation: Orientation) -> World {
+    pub fn new(width: u32, height: u32, shape: Shape, orientation: Orientation) -> World {
+        let shift = (width/2-2) as i32;
+        let drop = 0 as i32;
         let mut world = World {
             width,
             height,
-            tetromino: Tetromino{
-                shape,
-                orientation,
-                position: 5*height + width/2,
-            },
-            tetromino_cells: [0;4],
-            old_cells: vec![0;height],
+            tetromino: Tetromino::new(shape, orientation),
+            shift,
+            drop,
+            old_cells: vec![0;height as usize],
         };
         world.update_tetromino_cells();
         world
     }
-    pub fn width(&self) -> usize {
+
+    pub fn width(&self) -> u32 {
         self.width
     }
 
-    pub fn height(&self) -> usize {
+    pub fn height(&self) -> u32 {
         self.height
     }
 
@@ -141,55 +175,27 @@ impl World {
     }
     
     pub fn update_tetromino_cells(&mut self) {
-        let pos = self.tetromino.position;
-        let row = self.width();
-        match (self.tetromino.shape, self.tetromino.orientation) {
-            (Shape::I, Orientation::Up) => self.tetromino_cells = [pos-1,pos,pos+1,pos+2],
-            (Shape::I, Orientation::Right) => self.tetromino_cells = [pos+1-row,pos+1,pos+1+row,pos+1+2*row],
-            (Shape::I, Orientation::Down) => self.tetromino_cells = [pos-1+row,pos+row,pos+1+row,pos+2+row],
-            (Shape::I, Orientation::Left) => self.tetromino_cells = [pos-row,pos,pos+row,pos+2*row],
-            (Shape::J, Orientation::Up) => self.tetromino_cells = [pos-1-row,pos-1,pos,pos+1],
-            (Shape::J, Orientation::Right) => self.tetromino_cells = [pos+row,pos,pos-row,pos-row+1],
-            (Shape::J, Orientation::Down) => self.tetromino_cells = [pos-1,pos,pos+1,pos+row+1],
-            (Shape::J, Orientation::Left) => self.tetromino_cells = [pos+row-1,pos+row,pos,pos-row],
-            (Shape::L, Orientation::Up) => self.tetromino_cells = [pos-1,pos,pos+1,pos-row+1],
-            (Shape::L, Orientation::Right) => self.tetromino_cells = [pos-row,pos,pos+row,pos+row+1],
-            (Shape::L, Orientation::Down) => self.tetromino_cells = [pos+row-1,pos-1,pos,pos+1],
-            (Shape::L, Orientation::Left) => self.tetromino_cells = [pos-row-1,pos-row,pos,pos+row],
-            (Shape::O, _) => self.tetromino_cells = [pos,pos+row,pos+row-1,pos-1],
-            (Shape::S, Orientation::Up) => self.tetromino_cells = [pos-1,pos,pos-row,pos-row+1],
-            (Shape::S, Orientation::Right) => self.tetromino_cells = [pos-row,pos,pos+1,pos+row+1],
-            (Shape::S, Orientation::Down) => self.tetromino_cells = [pos+row-1,pos+row,pos,pos+1],
-            (Shape::S, Orientation::Left) => self.tetromino_cells = [pos-row-1,pos-1,pos,pos+row],
-            (Shape::T, Orientation::Up) => self.tetromino_cells = [pos-1,pos,pos-row,pos+1],
-            (Shape::T, Orientation::Right) => self.tetromino_cells = [pos-row,pos,pos+1,pos+row],
-            (Shape::T, Orientation::Down) => self.tetromino_cells = [pos+row,pos,pos-1,pos+1],
-            (Shape::T, Orientation::Left) => self.tetromino_cells = [pos-1,pos,pos-row,pos+row],
-            (Shape::Z, Orientation::Up) => self.tetromino_cells = [pos-row-1,pos-row,pos,pos+1],
-            (Shape::Z, Orientation::Right) => self.tetromino_cells = [pos+row,pos,pos+1,pos-row+1],
-            (Shape::Z, Orientation::Down) => self.tetromino_cells = [pos-1,pos,pos+row,pos+row+1],
-            (Shape::Z, Orientation::Left) => self.tetromino_cells = [pos+row-1,pos-1,pos,pos-row],
-            _ => {},
-        }
+        self.tetromino.update();
     }
 
     /// Return the pointer to the tetromino.
-    pub fn tetromino_cells(&self) -> *const TetrisCell {
-        self.tetromino_cells.as_ptr()
+    pub fn tetromino_cells(&self) -> u32 {
+        self.tetromino.cells()
     }
 
     pub fn update(&mut self) {
+        self.drop += 1;
         self.update_tetromino_cells();
     }
 
     pub fn shift_left(&mut self) {
         // Check that shift is valid 2DO 2DO
-        self.tetromino.position -= 1;
+        self.shift -= 1;
     }
 
     pub fn shift_right(&mut self) {
         // Check that shift is valid 2DO 2DO
-        self.tetromino.position += 1;
+        self.shift += 1;
     }
 
     pub fn rotate_left(&mut self) {
@@ -203,14 +209,15 @@ impl World {
     }
 
     pub fn soft_drop(&mut self) {
-        self.tetromino.position += self.width()
+        // Check that drop is valid 2DO 2DO
+        self.drop += 1;
     }
 
-    pub fn row(&self, idx: usize) -> usize {
-        idx / self.width
+    pub fn tetromino_shift(&self) -> i32 {
+        self.shift
     }
 
-    pub fn col(&self, idx: usize) -> usize {
-        idx % self.width
+    pub fn tetromino_drop(&self) -> i32 {
+        self.drop
     }
 }

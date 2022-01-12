@@ -1,5 +1,6 @@
 import { checkSnapshotValid } from "copy-webpack-plugin";
 import init, { Orientation, Shape, World } from "tetris";
+import { createUnparsedSourceFile } from "typescript";
 
 // Define colors
 const LIGHT_BLUE   = '#85C1E9';
@@ -21,8 +22,7 @@ canvas.width = WORLD_WIDTH*CELL_SIZE;
 canvas.height = WORLD_HEIGHT*CELL_SIZE;
 init().then(wasm => {
     // Create an instance of the world (the game).
-    const world = World.new(WORLD_WIDTH, WORLD_HEIGHT, Shape.Z, Orientation.Up);
-    const tetCells = new Uint32Array(wasm.memory.buffer, world.tetromino_cells(), 4)
+    const world = World.new(WORLD_WIDTH, WORLD_HEIGHT, Shape.I, Orientation.Up);
 
     // Listen for key-strokes.
     document.addEventListener("keydown", (e) => {
@@ -46,26 +46,31 @@ init().then(wasm => {
     }
     // Draw the snake within the grid.
     function drawTetromino() {
-        const tetCells = new Uint32Array(wasm.memory.buffer, world.tetromino_cells(), 4)
-        
+        const shift = world.tetromino_shift();
+        const drop = world.tetromino_drop();
+        const tetCells = world.tetromino_cells();
         ctx.beginPath();
-        tetCells.forEach((tetIdx,i) => {
-            let row = world.row(tetIdx);
-            let col = world.col(tetIdx);
-            ctx.fillRect(col*CELL_SIZE, row*CELL_SIZE, CELL_SIZE, CELL_SIZE);
-        })
+        let bit = 1;
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+                if ((tetCells & bit) == bit) {
+                    ctx.fillRect((shift+j)*CELL_SIZE, (drop+i)*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                }
+                bit <<= 1;
+            }
+        }
         ctx.stroke()
     }
 
     const gameLoop = () => {
         setTimeout(_ => {
-            world.update_tetromino_cells();
+            world.update();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawWorld(GREEN);
             drawTetromino();
             gameLoop();
             //requestAnimationFrame(gameLoop);
-        }, 100)
+        }, 800)
     }
     gameLoop()
 })
