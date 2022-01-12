@@ -1,6 +1,5 @@
-import init, { World } from "tetris";
-
-console.log('Hello, World from typescript 2!');
+import { checkSnapshotValid } from "copy-webpack-plugin";
+import init, { Orientation, Shape, World } from "tetris";
 
 // Define colors
 const LIGHT_BLUE   = '#85C1E9';
@@ -22,8 +21,8 @@ canvas.width = WORLD_WIDTH*CELL_SIZE;
 canvas.height = WORLD_HEIGHT*CELL_SIZE;
 init().then(wasm => {
     // Create an instance of the world (the game).
-    const world = World.new(WORLD_WIDTH, WORLD_HEIGHT);
-    const tetCells = new Uint32Array(wasm.memory.buffer, world.tet_cells(), 4)
+    const world = World.new(WORLD_WIDTH, WORLD_HEIGHT, Shape.Z, Orientation.Up);
+    const tetCells = new Uint32Array(wasm.memory.buffer, world.tetromino_cells(), 4)
 
     // Listen for key-strokes.
     document.addEventListener("keydown", (e) => {
@@ -47,7 +46,7 @@ init().then(wasm => {
     }
     // Draw the snake within the grid.
     function drawTetromino() {
-        const tetCells = new Uint32Array(wasm.memory.buffer, world.tet_cells(), 4)
+        const tetCells = new Uint32Array(wasm.memory.buffer, world.tetromino_cells(), 4)
         
         ctx.beginPath();
         tetCells.forEach((tetIdx,i) => {
@@ -60,16 +59,13 @@ init().then(wasm => {
 
     const gameLoop = () => {
         setTimeout(_ => {
-            world.update_tet_cells();
+            world.update_tetromino_cells();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawWorld(GREEN);
             drawTetromino();
             gameLoop();
+            //requestAnimationFrame(gameLoop);
         }, 100)
     }
     gameLoop()
-    console.log(world.width(), world.height());
-    
-    console.log(tetCells,2)
-
 })
