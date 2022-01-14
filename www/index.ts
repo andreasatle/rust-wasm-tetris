@@ -2,16 +2,22 @@ import { checkSnapshotValid } from "copy-webpack-plugin";
 import init, { Orientation, Shape, World } from "tetris";
 import { createUnparsedSourceFile } from "typescript";
 
-// Define colors
+// Definition of colors
 const LIGHT_BLUE   = '#85C1E9';
-const BLUE         = '#2980B9';
-const DARK_BLUE    = '#1F618D';
-const GREEN        = '#1ABC9C';
-const RED          = '#CB4335';
-const ALMOST_WHITE = '#F0F0F0';
+const CYAN = '#00FFFF';
+const BLUE = '#0000FF';
+const ORANGE = '#FFA500';
+const YELLOW = '#FFFF00';
+const GREEN = '#00FF00';
+const PURPLE = '#800080';
+const RED = '#FF0000';
+
+const NUM_SHAPES = 7;
+// Define colors
+const colors =[CYAN,BLUE,ORANGE,YELLOW,GREEN,PURPLE,RED];
 
 // Define size of the game
-const CELL_SIZE = 15;
+const CELL_SIZE = 20;
 const WORLD_WIDTH = 10;
 const WORLD_HEIGHT = 22;
 
@@ -23,11 +29,10 @@ canvas.height = WORLD_HEIGHT*CELL_SIZE;
 init().then(wasm => {
     // Create an instance of the world (the game).
     const world = World.new(WORLD_WIDTH, WORLD_HEIGHT, Shape.I, Orientation.Up);
-
     // Listen for key-strokes.
     document.addEventListener("keydown", (e) => {
-        console.log('Key: ', e.code);
-        console.log(world.keystroke(e.code));
+        world.keystroke(e.code);
+        drawGame();
     })
     
     //Draw the grid.
@@ -43,9 +48,24 @@ init().then(wasm => {
             ctx.lineTo(canvas.width, CELL_SIZE*y);
         }
         ctx.stroke();
+
+        const cells = new Uint8Array(wasm.memory.buffer, world.old_cells(), WORLD_WIDTH*WORLD_HEIGHT);
+        for (let row = 0; row < WORLD_HEIGHT; row++) {
+            let pos = row*WORLD_WIDTH;
+            for (let col = 0; col < WORLD_WIDTH; col++) {
+                if (cells[pos] < NUM_SHAPES) {
+                    ctx.fillStyle = colors[cells[pos]];
+                    ctx.beginPath();
+                    ctx.fillRect(col*CELL_SIZE, row*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                }
+                pos++;
+            }
+        }
+        ctx.stroke();
     }
     // Draw the snake within the grid.
     function drawTetromino() {
+        console.log(world.tetromino_shape(), world.tetromino_orientation())
         const shift = world.tetromino_shift();
         const drop = world.tetromino_drop();
         const tetCells = world.tetromino_cells();
@@ -62,14 +82,17 @@ init().then(wasm => {
         ctx.stroke()
     }
 
+    function drawGame() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawWorld(LIGHT_BLUE);
+        drawTetromino();
+    }
+    
     const gameLoop = () => {
         setTimeout(_ => {
             world.update();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawWorld(GREEN);
-            drawTetromino();
+            drawGame();
             gameLoop();
-            //requestAnimationFrame(gameLoop);
         }, 800)
     }
     gameLoop()
